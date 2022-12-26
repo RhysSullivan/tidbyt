@@ -8,6 +8,11 @@ import * as htmlToImage from 'html-to-image';
 import { useEffect, useRef, useState } from "react";
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 
+async function CC() {
+  return (await import('canvas-capture')).default;
+}
+
+
 const resizeBase64Image = (base64: string, width: number, height: number): Promise<string> => {
   // Create a canvas element
   const canvas = document.createElement('canvas') as HTMLCanvasElement;
@@ -33,16 +38,15 @@ const resizeBase64Image = (base64: string, width: number, height: number): Promi
   });
 };
 
-let mediaRecorder: MediaRecorder | null = null;
-let recordedChunks: Blob[] = [];
 let canvas: HTMLCanvasElement | null = null;
+
 const Home: NextPage = () => {
   const domEl = useRef(null);
   const [tidbytImage, setTidbytImage] = useState<string | null>(null);
   const [recordedImage, setRecordedImage] = useState<string | null>(null);
-  const [frame, setFrame] = useState(0);
   const [recording, setRecording] = useState(false);
   const mutation = trpc.example.push.useMutation();
+
 
   const record = async () => {
     if (!recording) return
@@ -53,13 +57,13 @@ const Home: NextPage = () => {
     const image = new Image();
     image.src = frame;
     image.crossOrigin = 'anonymous'
-    image.onload = () => {
+    image.onload = async () => {
       if (!canvas) {
         return
       }
       console.log('rendering to canvas')
       canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-
+      (await CC()).recordFrame();
     };
   };
 
@@ -68,44 +72,35 @@ const Home: NextPage = () => {
     return htmlToImage.toPng(domEl.current);
   }
 
-  const startRecording = () => {
+  const startRecording = async () => {
     canvas = document.createElement('canvas') as HTMLCanvasElement;
-    mediaRecorder = new MediaRecorder(canvas.captureStream(30),
-      {
-        mimeType: 'video/webm;codecs=vp9'
-      }
-    );
-    recordedChunks = [];
-    mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) {
-        console.log('capturing', e.data)
-        recordedChunks.push(e.data);
-      } else {
-        console.log('no data')
-      }
-    };
-    mediaRecorder.start();
-    setRecording(true)
+    canvas.width = 64;
+    canvas.height = 32;
+
+    (await CC()).init(canvas, {
+      showRecDot: true,
+
+    });
+    setRecording(true);
+    (await CC()).beginGIFRecord({
+      fps: 60,
+      onExport(blob, filename) {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = function () {
+          const base64data = reader.result;
+          console.log(base64data)
+          setRecordedImage(base64data as string);
+        }
+      },
+    });
+
   }
 
-  const stopRecording = () => {
-    if (!mediaRecorder) return;
-    mediaRecorder.stop();
-    setTimeout(() => {
-      const blob = new Blob(recordedChunks, {
-        type: "video/webm"
-      });
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = function () {
-        const base64data = reader.result;
-        setRecordedImage(base64data as string)
-      }
-    }, 0);
-    mediaRecorder = null;
+  const stopRecording = async () => {
     canvas = null;
-    recordedChunks = []
-    setRecording(false)
+    setRecording(false);
+    (await CC()).stopRecord();
   }
   record();
   useEffect(() => {
@@ -113,7 +108,7 @@ const Home: NextPage = () => {
       const dataUrl = await getImage();
       setTidbytImage(dataUrl ?? null)
     }
-    const interval = setInterval(() => syncPreview(), 1);
+    const interval = setInterval(() => syncPreview(), 100);
     return () => {
       clearInterval(interval);
     };
@@ -178,32 +173,6 @@ const Home: NextPage = () => {
           </div>
         </div>
 
-        <div>
-          <h2 className='text-4xl'>Recording</h2>
-          <div className="border-solid border-red-500 border-2" style={{
-            width: (64 * 6),
-            height: (32 * 6),
-            overflow: 'hidden',
-          }}>
-            {
-              recordedImage &&
-              <video autoPlay loop
-                style={{
-                  width: '100%',
-                }}>
-                <source type="video/webm" src={recordedImage} style={{
-                  imageRendering: "pixelated",
-                  maskSize: "contain",
-                  width: '100%',
-                  WebkitMaskSize: "contain",
-                  maskImage: "url(./mask.png)",
-                  WebkitMaskImage: "url(./mask.png)"
-                }} />
-              </video>
-            }
-          </div>
-        </div>
-
 
         <div>
           <h2 className='text-4xl'>Gif</h2>
@@ -214,19 +183,14 @@ const Home: NextPage = () => {
           }}>
             {
               recordedImage &&
-              <video autoPlay loop
-                style={{
-                  width: '100%',
-                }}>
-                <source type="video/webm" src={recordedImage} style={{
-                  imageRendering: "pixelated",
-                  maskSize: "contain",
-                  width: '100%',
-                  WebkitMaskSize: "contain",
-                  maskImage: "url(./mask.png)",
-                  WebkitMaskImage: "url(./mask.png)"
-                }} />
-              </video>
+              <img src={recordedImage} style={{
+                width: '100%',
+                imageRendering: "pixelated",
+                maskSize: "contain",
+                WebkitMaskSize: "contain",
+                maskImage: "url(./mask.png)",
+                WebkitMaskImage: "url(./mask.png)"
+              }} />
             }
           </div>
         </div>
@@ -273,9 +237,7 @@ const Home: NextPage = () => {
             onClick={
               async () => {
                 // convert recordedImage from a webm to a gif
-                console.log(recordedImage)
-                const resized = await resizeBase64Image(recordedImage!, 64, 32)
-                const sanitized = resized.split(',')[1]!;
+                const sanitized = recordedImage!.split(',')[1]!;
                 mutation.mutate(sanitized);
               }
             }
