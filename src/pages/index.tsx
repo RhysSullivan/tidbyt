@@ -1,11 +1,12 @@
+/* eslint-disable jsx-a11y/alt-text */
+/* eslint-disable @next/next/no-img-element */
 import { type NextPage } from "next";
 import Head from "next/head";
-import Link from "next/link";
-import * as NextImage from "next/image";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { trpc } from "../utils/trpc";
 import * as htmlToImage from 'html-to-image';
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
 
 const resizeBase64Image = (base64: string, width: number, height: number): Promise<string> => {
   // Create a canvas element
@@ -24,7 +25,6 @@ const resizeBase64Image = (base64: string, width: number, height: number): Promi
 
       // Draw the image to the canvas
       canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-
       // Resolve the Promise with the resized image as a base64 string
       resolve(canvas.toDataURL());
     };
@@ -33,33 +33,92 @@ const resizeBase64Image = (base64: string, width: number, height: number): Promi
   });
 };
 
-
+let mediaRecorder: MediaRecorder | null = null;
+let recordedChunks: Blob[] = [];
+let canvas: HTMLCanvasElement | null = null;
 const Home: NextPage = () => {
   const domEl = useRef(null);
   const [tidbytImage, setTidbytImage] = useState<string | null>(null);
-  const hello = trpc.example.hello.useQuery({ text: "from tRPC" });
+  const [recordedImage, setRecordedImage] = useState<string | null>(null);
+  const [frame, setFrame] = useState(0);
+  const [recording, setRecording] = useState(false);
   const mutation = trpc.example.push.useMutation();
 
+  const record = async () => {
+    if (!recording) return
+    if (!canvas) return
+    const frame = await getImage();
+    if (!frame) return;
+
+    const image = new Image();
+    image.src = frame;
+    image.crossOrigin = 'anonymous'
+    image.onload = () => {
+      if (!canvas) {
+        return
+      }
+      console.log('rendering to canvas')
+      canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    };
+  };
 
   const getImage = async () => {
     if (!domEl.current) return;
     return htmlToImage.toPng(domEl.current);
   }
 
-  const downloadImage = async () => {
-    const dataUrl = await getImage();
-
-    if (!dataUrl) return;
-    // download image
-    const link = document.createElement('a');
-    link.download = "html-to-img.png";
-    link.href = dataUrl;
-    setTidbytImage(link.href)
+  const startRecording = () => {
+    canvas = document.createElement('canvas') as HTMLCanvasElement;
+    mediaRecorder = new MediaRecorder(canvas.captureStream(30),
+      {
+        mimeType: 'video/webm;codecs=vp9'
+      }
+    );
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) {
+        console.log('capturing', e.data)
+        recordedChunks.push(e.data);
+      } else {
+        console.log('no data')
+      }
+    };
+    mediaRecorder.start();
+    setRecording(true)
   }
 
-  if (domEl) {
-    downloadImage()
+  const stopRecording = () => {
+    if (!mediaRecorder) return;
+    mediaRecorder.stop();
+    setTimeout(() => {
+      const blob = new Blob(recordedChunks, {
+        type: "video/webm"
+      });
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = function () {
+        const base64data = reader.result;
+        setRecordedImage(base64data as string)
+      }
+    }, 0);
+    mediaRecorder = null;
+    canvas = null;
+    recordedChunks = []
+    setRecording(false)
   }
+  record();
+  useEffect(() => {
+    const syncPreview = async () => {
+      const dataUrl = await getImage();
+      setTidbytImage(dataUrl ?? null)
+    }
+    const interval = setInterval(() => syncPreview(), 1);
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
 
   return (
     <>
@@ -71,7 +130,7 @@ const Home: NextPage = () => {
       <main className="flex min-h-screen flex-col items-center justify-center bg-[#15162c] text-slate-200">
         <div className="flex flex-col items-center justify-center flex-colspace-x-2">
           <div >
-            <h2>React</h2>
+            <h2 className='text-4xl'>React</h2>
             <div className="border-solid border-red-500 border-2" style={{
               width: (64 * 6),
               height: (32 * 6),
@@ -83,21 +142,31 @@ const Home: NextPage = () => {
               }} >
                 {/* <img src='./push.png' /> */}
                 {/* <img src='./push_64_32.png' /> */}
-                <NextImage src="https://www.answeroverflow.com/content/branding/meta_header.png" alt='answer overflow' width={300} height={150} className='w-full' />
+                {/* <img src="https://www.answeroverflow.com/content/branding/meta_header.png" /> */}
                 {/* <h1 className='text-white text-9xl' >Large Text</h1> */}
+                <button type="button" className="bg-slate-800 w-full h-full" disabled>
+                  <div className='flex items-center justify-center'>
+
+                    <ArrowPathIcon className='animate-spin w-20' />
+                    <span className='text-6xl'>
+
+                      Processing...
+                    </span>
+                  </div>
+                </button>
               </div>
             </div>
           </div>
         </div>
         <div>
-          <h2>Tibyt</h2>
+          <h2 className='text-4xl'>Tibyt</h2>
           <div className="border-solid border-red-500 border-2" style={{
             width: (64 * 6),
             height: (32 * 6),
             overflow: 'hidden',
           }}>
             {
-              tidbytImage && <NextImage src={tidbytImage} alt='answer overflow' width={64} height={32} style={{
+              tidbytImage && <img src={tidbytImage} style={{
                 width: '100%',
                 imageRendering: "pixelated",
                 maskSize: "contain",
@@ -108,8 +177,81 @@ const Home: NextPage = () => {
             }
           </div>
         </div>
+
         <div>
-          <br />
+          <h2 className='text-4xl'>Recording</h2>
+          <div className="border-solid border-red-500 border-2" style={{
+            width: (64 * 6),
+            height: (32 * 6),
+            overflow: 'hidden',
+          }}>
+            {
+              recordedImage &&
+              <video autoPlay loop
+                style={{
+                  width: '100%',
+                }}>
+                <source type="video/webm" src={recordedImage} style={{
+                  imageRendering: "pixelated",
+                  maskSize: "contain",
+                  width: '100%',
+                  WebkitMaskSize: "contain",
+                  maskImage: "url(./mask.png)",
+                  WebkitMaskImage: "url(./mask.png)"
+                }} />
+              </video>
+            }
+          </div>
+        </div>
+
+
+        <div>
+          <h2 className='text-4xl'>Gif</h2>
+          <div className="border-solid border-red-500 border-2" style={{
+            width: (64 * 6),
+            height: (32 * 6),
+            overflow: 'hidden',
+          }}>
+            {
+              recordedImage &&
+              <video autoPlay loop
+                style={{
+                  width: '100%',
+                }}>
+                <source type="video/webm" src={recordedImage} style={{
+                  imageRendering: "pixelated",
+                  maskSize: "contain",
+                  width: '100%',
+                  WebkitMaskSize: "contain",
+                  maskImage: "url(./mask.png)",
+                  WebkitMaskImage: "url(./mask.png)"
+                }} />
+              </video>
+            }
+          </div>
+        </div>
+
+        <br />
+        <div className='flex gap-11'>
+
+          <button
+            type="button"
+            className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            onClick={
+
+              async () => {
+                if (!recording) {
+                  startRecording();
+                } else {
+                  stopRecording();
+                }
+              }
+            }
+
+          >
+            {!recording ? 'Start Recording' : 'Stop Recording'}
+
+          </button>
           <button
             type="button"
             className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
@@ -118,16 +260,31 @@ const Home: NextPage = () => {
                 const img = await getImage();
                 const resized = await resizeBase64Image(img!, 64, 32)
                 const sanitized = resized.replace(/^data:image\/(png|jpg);base64,/, "");
-                console.log(sanitized)
+
                 mutation.mutate(sanitized);
               }
             }
           >
             Upload
           </button>
+          <button
+            type="button"
+            className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            onClick={
+              async () => {
+                // convert recordedImage from a webm to a gif
+                console.log(recordedImage)
+                const resized = await resizeBase64Image(recordedImage!, 64, 32)
+                const sanitized = resized.split(',')[1]!;
+                mutation.mutate(sanitized);
+              }
+            }
+          >
+            Upload Recording
+          </button>
           {mutation.error && <p>Something went wrong! {mutation.error.message}</p>}
         </div>
-      </main>
+      </main >
     </>
   );
 };
