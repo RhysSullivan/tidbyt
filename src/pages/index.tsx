@@ -4,116 +4,46 @@ import { type NextPage } from "next";
 import Head from "next/head";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { trpc } from "../utils/trpc";
-import * as htmlToImage from 'html-to-image';
-import { useEffect, useRef, useState } from "react";
-import { ArrowPathIcon } from '@heroicons/react/24/solid'
-
-async function CC() {
-  return (await import('canvas-capture')).default;
-}
-
-
-const resizeBase64Image = (base64: string, width: number, height: number): Promise<string> => {
-  // Create a canvas element
-  const canvas = document.createElement('canvas') as HTMLCanvasElement;
-
-  // Create an image element from the base64 string
-  const image = new Image();
-  image.src = base64;
-
-  // Return a Promise that resolves when the image has loaded
-  return new Promise((resolve, reject) => {
-    image.onload = () => {
-      canvas.width = width;
-      canvas.height = height;
-
-
-      // Draw the image to the canvas
-      canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-      // Resolve the Promise with the resized image as a base64 string
-      resolve(canvas.toDataURL());
-    };
-
-    image.onerror = reject;
-  });
-};
-
-let canvas: HTMLCanvasElement | null = null;
+import Capture from "../components/capture";
+import { useState } from "react";
+import { CC } from "../utils/image";
 
 const Home: NextPage = () => {
-  const domEl = useRef(null);
-  const [tidbytImage, setTidbytImage] = useState<string | null>(null);
-  const [recordedImage, setRecordedImage] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
   const mutation = trpc.example.push.useMutation();
-
-
-  const record = async () => {
-    if (!recording) return
-    if (!canvas) return
-    const frame = await getImage();
-    if (!frame) return;
-
-    const image = new Image();
-    image.src = frame;
-    image.crossOrigin = 'anonymous'
-    image.onload = async () => {
-      if (!canvas) {
-        return
-      }
-      console.log('rendering to canvas')
-      canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-      (await CC()).recordFrame();
-    };
-  };
-
-  const getImage = async () => {
-    if (!domEl.current) return;
-    return htmlToImage.toPng(domEl.current);
-  }
-
+  const [tidbytImage, setTidbytImage] = useState<string | null>(null);
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [isGif, setIsGif] = useState(false);
+  const FPS = 10;
   const startRecording = async () => {
-    canvas = document.createElement('canvas') as HTMLCanvasElement;
-    canvas.width = 64;
-    canvas.height = 32;
+    const new_canvas = document.createElement('canvas') as HTMLCanvasElement;
+    new_canvas.width = 64;
+    new_canvas.height = 32;
 
-    (await CC()).init(canvas, {
+    (await CC()).init(new_canvas, {
       showRecDot: true,
 
     });
-    setRecording(true);
+
     (await CC()).beginGIFRecord({
-      fps: 60,
+      fps: FPS,
+      quality: 10,
       onExport(blob, filename) {
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = function () {
           const base64data = reader.result;
-          console.log(base64data)
-          setRecordedImage(base64data as string);
+          setTidbytImage(base64data as string);
         }
       },
     });
+    setCanvas(new_canvas);
 
   }
 
   const stopRecording = async () => {
-    canvas = null;
-    setRecording(false);
     (await CC()).stopRecord();
+    setCanvas(null);
   }
-  record();
-  useEffect(() => {
-    const syncPreview = async () => {
-      const dataUrl = await getImage();
-      setTidbytImage(dataUrl ?? null)
-    }
-    const interval = setInterval(() => syncPreview(), 100);
-    return () => {
-      clearInterval(interval);
-    };
-  }, []);
-
 
   return (
     <>
@@ -131,25 +61,13 @@ const Home: NextPage = () => {
               height: (32 * 6),
               overflow: 'hidden',
             }}>
-              <div ref={domEl} style={{
-                width: '100%',
-                height: '100%',
-              }} >
-                {/* <img src='./push.png' /> */}
-                {/* <img src='./push_64_32.png' /> */}
-                {/* <img src="https://www.answeroverflow.com/content/branding/meta_header.png" /> */}
-                {/* <h1 className='text-white text-9xl' >Large Text</h1> */}
-                <button type="button" className="bg-slate-800 w-full h-full" disabled>
-                  <div className='flex items-center justify-center'>
-
-                    <ArrowPathIcon className='animate-spin w-20' />
-                    <span className='text-6xl'>
-
-                      Processing...
-                    </span>
-                  </div>
-                </button>
-              </div>
+              <Capture setTidbytImage={
+                setTidbytImage
+              }
+                canvas={canvas}
+                FPS={FPS}
+                is_gif={isGif}
+              />
             </div>
           </div>
         </div>
@@ -172,77 +90,46 @@ const Home: NextPage = () => {
             }
           </div>
         </div>
-
-
-        <div>
-          <h2 className='text-4xl'>Gif</h2>
-          <div className="border-solid border-red-500 border-2" style={{
-            width: (64 * 6),
-            height: (32 * 6),
-            overflow: 'hidden',
-          }}>
-            {
-              recordedImage &&
-              <img src={recordedImage} style={{
-                width: '100%',
-                imageRendering: "pixelated",
-                maskSize: "contain",
-                WebkitMaskSize: "contain",
-                maskImage: "url(./mask.png)",
-                WebkitMaskImage: "url(./mask.png)"
-              }} />
-            }
-          </div>
-        </div>
-
         <br />
         <div className='flex gap-11'>
+          {
+            isGif &&
 
-          <button
-            type="button"
-            className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            onClick={
-
+            <button className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2" onClick={
               async () => {
-                if (!recording) {
-                  startRecording();
-                } else {
+
+                if (canvas) {
                   stopRecording();
+                } else {
+                  startRecording();
                 }
               }
-            }
+            }>
+              {canvas ? 'Stop Recording' : 'Start Recording'}
+            </button>
+          }
+          <label htmlFor="isGif" className="inline-flex items-center">
+            <span className="ml-2 text-white">Gif</span>
+          </label>
+          <input
+            type="checkbox"
+            className="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out"
+            checked={isGif}
+            onChange={(e) => setIsGif(e.target.checked)}
+          />
 
-          >
-            {!recording ? 'Start Recording' : 'Stop Recording'}
-
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            onClick={
-              async () => {
-                const img = await getImage();
-                const resized = await resizeBase64Image(img!, 64, 32)
-                const sanitized = resized.replace(/^data:image\/(png|jpg);base64,/, "");
-
-                mutation.mutate(sanitized);
-              }
-            }
-          >
-            Upload
-          </button>
           <button
             type="button"
             className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
             onClick={
               async () => {
                 // convert recordedImage from a webm to a gif
-                const sanitized = recordedImage!.split(',')[1]!;
+                const sanitized = tidbytImage!.split(',')[1]!;
                 mutation.mutate(sanitized);
               }
             }
           >
-            Upload Recording
+            Upload
           </button>
           {mutation.error && <p>Something went wrong! {mutation.error.message}</p>}
         </div>
