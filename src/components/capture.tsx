@@ -3,6 +3,16 @@ import * as htmlToImage from 'html-to-image';
 import { ArrowPathIcon } from '@heroicons/react/24/solid';
 import { CC, resizeBase64Image } from '../utils/image';
 
+export const Animated = () => (
+    <button type="button" className="bg-purple-900 w-full h-full" disabled>
+        <div className='flex items-center justify-center w-full h-full' >
+            <ArrowPathIcon className='animate-spin w-20' />
+            <span className='text-6xl'>
+                Procesess
+            </span>
+        </div>
+    </button >
+)
 
 const Capture = (
     {
@@ -71,16 +81,7 @@ const Capture = (
             {/* <img src='./push_64_32.png' /> */}
             {/* <img src="https://www.answeroverflow.com/content/branding/meta_header.png" /> */}
             {/* <h1 className='text-white text-9xl' >Large Text</h1> */}
-            <button type="button" className="bg-slate-800 w-full h-full" disabled>
-                <div className='flex items-center justify-center'>
-
-                    <ArrowPathIcon className='animate-spin w-20' />
-                    <span className='text-6xl'>
-
-                        Processing...
-                    </span>
-                </div>
-            </button>
+            <Animated />
         </div>
 
     )
