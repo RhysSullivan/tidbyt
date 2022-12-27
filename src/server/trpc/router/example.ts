@@ -59,7 +59,10 @@ export const exampleRouter = router({
         await new Promise((resolve) => setTimeout(resolve, 1000 / 10))
       }
 
-      const gifBuffer = (await gif.toBuffer()).toString('base64')
+      const gifBuffer = (await (await gif.toSharp()).webp({
+        nearLossless: true, quality: 50
+
+      }).toBuffer()).toString('base64')
       await browser.close()
       const response = await fetch(`https://api.tidbyt.com/v0/devices/${process.env.TIDBYT_DEVICE_ID}/push`, {
         method: 'POST',
