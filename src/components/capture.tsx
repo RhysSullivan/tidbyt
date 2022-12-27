@@ -2,16 +2,29 @@ import { useRef, useEffect } from 'react';
 import * as htmlToImage from 'html-to-image';
 import { ArrowPathIcon } from '@heroicons/react/24/solid';
 import { CC, resizeBase64Image } from '../utils/image';
+import Marquee from "react-fast-marquee";
 
 export const Animated = () => (
-    <button type="button" className="bg-purple-900 w-full h-full" disabled>
-        <div className='flex items-center justify-center w-full h-full' >
-            <ArrowPathIcon className='animate-spin w-20' />
-            <span className='text-6xl'>
-                Procesess
-            </span>
+    <button type="button" className="bg-purple-900 w-full h-full text-white" disabled>
+        <div className='flex flex-col items-center justify-center'>
+            <Marquee
+                speed={100}
+                gradient={false}
+            >
+                <div style={{
+                    width: '500px',
+                }}>
+
+                </div>
+                <span className='text-4xl'>
+                    Processing
+                </span>
+
+            </Marquee>
+            <br />
+            <ArrowPathIcon className='animate-spin w-20' width="64" height="64" />
         </div>
-    </button >
+    </button>
 )
 
 const Capture = (

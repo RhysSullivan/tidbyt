@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import { router, publicProcedure } from "../trpc";
 import puppeteer from "puppeteer";
-import { resizeBase64Image } from "../../../utils/image";
 import sharp from "sharp";
 import { createGif } from 'sharp-gif'
 
@@ -37,26 +36,27 @@ export const exampleRouter = router({
     .query(async ({ input }) => {
       const browser = await puppeteer.launch(
         {
-          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=medium'],
         }
       )
       const page = await browser.newPage()
-
-      await page.goto('http://localhost:3000/example')
-      await page.waitForSelector('#capture-container')
+      const FPS = 10
       const gif = await createGif({
         width: 64,
         height: 32,
         quality: 1,
-        delay: 1000 / 10,
+        delay: Math.trunc(1000 / FPS),
         repeat: 0,
       })
-      for (let i = 0; i < 15; i++) {
-        const data = await page.screenshot({ omitBackground: true, fullPage: false, clip: { x: 0, y: 0, width: 64 * 6, height: 32 * 6 } })
+      const duration = 10
+      const frames = FPS * duration
+      await page.goto('http://localhost:3000/example')
+      for (let i = 0; i < frames; i++) {
+        const data = await page.screenshot({ omitBackground: true, fullPage: false, clip: { x: 0, y: 0, width: 64 * 6, height: 32 * 6 }, path: `./test/${i}.png` })
         const resized = sharp(data).resize(64, 32).png()
         gif.addFrame(resized)
-        console.log('waiting')
-        await new Promise((resolve) => setTimeout(resolve, 1000 / 10))
+        console.log(`frame ${i} of ${frames} (${Math.trunc(i / frames * 100)}%)`)
+        await new Promise((resolve) => setTimeout(resolve, 1000 / FPS))
       }
 
       const gifBuffer = (await (await gif.toSharp()).webp({

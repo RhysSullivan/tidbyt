@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@font-face {
+    font-family: "myFirstFont";
+    src: url("./Quinquefive-K7qep.ttf");
+}
+
+* {
+    font-size: 100%;
+    font-family: "myFirstFont";
+   }
