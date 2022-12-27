@@ -4,7 +4,7 @@ import { router, publicProcedure } from "../trpc";
 import puppeteer from "puppeteer";
 import { resizeBase64Image } from "../../../utils/image";
 import sharp from "sharp";
-
+import { createGif } from 'sharp-gif'
 
 export const exampleRouter = router({
   hello: publicProcedure
@@ -44,19 +44,30 @@ export const exampleRouter = router({
 
       await page.goto('http://localhost:3000/example')
       await page.waitForSelector('#capture-container')
-      // wait 3 seconds 
-      await page.waitForTimeout(3000)
-      const data = await page.screenshot({ omitBackground: true, fullPage: false, clip: { x: 0, y: 0, width: 64 * 6, height: 32 * 6 } })
+      const gif = await createGif({
+        width: 64,
+        height: 32,
+        quality: 1,
+        delay: 1000 / 10,
+        repeat: 0,
+      })
+      for (let i = 0; i < 15; i++) {
+        const data = await page.screenshot({ omitBackground: true, fullPage: false, clip: { x: 0, y: 0, width: 64 * 6, height: 32 * 6 } })
+        const resized = sharp(data).resize(64, 32).png()
+        gif.addFrame(resized)
+        console.log('waiting')
+        await new Promise((resolve) => setTimeout(resolve, 1000 / 10))
+      }
+
+      const gifBuffer = (await gif.toBuffer()).toString('base64')
       await browser.close()
-      const resized = await (await sharp(data).resize(64, 32).toBuffer()).toString('base64')
-      console.log(resized)
       const response = await fetch(`https://api.tidbyt.com/v0/devices/${process.env.TIDBYT_DEVICE_ID}/push`, {
         method: 'POST',
         body: JSON.stringify({
-          image: resized
+          image: gifBuffer
         }),
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.TIDBYT_API_KEY}` }
       });
-      return resized
+      return gifBuffer
     }),
 });

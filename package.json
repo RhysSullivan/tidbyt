@@ -19,6 +19,8 @@
     "@trpc/react-query": "^10.0.0",
     "@trpc/server": "^10.0.0",
     "canvas-capture": "^2.0.5",
+    "get-pixels": "^3.3.3",
+    "gifencoder": "^2.0.1",
     "html-to-image": "^1.11.3",
     "next": "13.0.2",
     "next-auth": "^4.18.3",
@@ -26,10 +28,13 @@
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "sharp": "^0.31.3",
+    "sharp-gif": "^0.1.7",
     "superjson": "1.9.1",
     "zod": "^3.18.0"
   },
   "devDependencies": {
+    "@types/get-pixels": "^3.3.2",
+    "@types/gifencoder": "^2.0.1",
     "@types/node": "^18.0.0",
     "@types/react": "^18.0.14",
     "@types/react-dom": "^18.0.5",
